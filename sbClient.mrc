@@ -319,11 +319,9 @@ on *:dialog:sbClient_search:sclick:1: {
   if ($did(10).state) {
     ; do local search
     if (%sbClient.searching == 1) {
-      if ($input(Local search seems to be already active. Do you want to stop active local search and start your current search?,yqd,Local search is active) == $true) {
-        sbClientdll Stop 1
-        set %sbClient.searching 0
-      }
-      else return
+      if ($input(Local search seems to be already active. Do you want to stop active local search and start your current search?,yqd,Local search is active) != $true) return
+      sbClientdll Stop 1
+      set %sbClient.searching 0
       if ($did(11).state) goto chansearch
     }
     if (!%sbClient.ListFolder) {
@@ -342,7 +340,7 @@ on *:dialog:sbClient_search:sclick:1: {
   if ($did(25).state) {
     .set -u600 %sbclient.searchactive 1
     .set -u600 %DLF.searchactive 1
-    scon $sbClient.GetNetworkID($did(21).seltext) msg $sbClient.GetChannel($did(21).seltext) @find %sstring
+    scon -t1 $sbClient.GetNetworkID($did(21).seltext) msg $sbClient.GetChannel($did(21).seltext) @find %sstring
   }
   if ($did(11).state) {
     if (!$did(20).seltext) { sbClient.error No channel selected! | return }
@@ -462,9 +460,9 @@ alias -l sbClient.SendToAutoGet {
   if (!%lines) return
 
   var %path = $nofile($script(AutoGet.mrc))
-  .fopen MTlisttowaiting $+(",%path,AGwaiting.ini,")
+  .fopen MTlisttowaiting $+(",%path,AGwaiting.ini")
   if ($fopen(MTlisttowaiting).err) return
-  .fseek -l MTlisttowaiting $lines($+(",%path,AGwaiting.ini,"))
+  .fseek -l MTlisttowaiting $lines($+(",%path,AGwaiting.ini"))
   if ($fopen(MTlisttowaiting).err) return
   var %i = 1, %j = 0
   while (%i <= %lines) {
@@ -745,8 +743,7 @@ alias sbClient.Check {
 }
 alias sbClient.DoSearch {
   if (!$($+(%,sbClient.,$1,.trigger),2)) halt
-  scon $sbClient.GetNetworkID($1)
-  msg $sbClient.GetChannel($1) $($+(%,sbClient.,$1,.trigger),2) $2-
+  scon -t1 $sbClient.GetNetworkID($1) msg $sbClient.GetChannel($1) $($+(%,sbClient.,$1,.trigger),2) $2-
 }
 on *:filercvd:*results?for*: {
   var %resultdir = $+($mircdir,SearchBot results), %fn = $nopath($filename)
