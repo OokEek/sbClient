@@ -116,6 +116,8 @@
 ; changes made to WhereIs bot accounted for.
 ; 2.26.2
 ; added sbClient.GetAllNetChannels & sbClient.GetAllChannels, & replaced existing loops with calls to this.
+; changed some /scon calls to use -t1 to only send the message if connected.
+; reworked the logic when starting a local search when one is already underway.
 ;
 
 alias sbClient.version return 2.26.2
