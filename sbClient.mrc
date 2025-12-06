@@ -114,9 +114,11 @@
 ; added advanced options to dialog (atm this only allows setting the regex pattern)
 ; 2.26.1
 ; changes made to WhereIs bot accounted for.
+; 2.26.2
+; added sbClient.GetAllNetChannels & sbClient.GetAllChannels, & replaced existing loops with calls to this.
 ;
 
-alias sbClient.version return 2.26.1
+alias sbClient.version return 2.26.2
 
 ; Ook: added shortcut for dll
 alias sbClientdll return $dll($scriptdirsbClient.dll,$1,$2-)
@@ -168,16 +170,7 @@ on *:dialog:sbClient_options:init:0: {
   sbClient.CheckVars
   if (%sbClient.storetxt == 1) did -c sbClient_options 26
   if (%sbClient.groupfind == 1) did -c sbClient_options 96
-  var %cnter = 1
-  while (%cnter <= $scon(0)) {
-    scon %cnter
-    var %cnter2 = 1
-    while ($chan(%cnter2) != $null) {
-      did -a sbClient_options 31 $+($v1,@,$network)
-      inc %cnter2
-    }
-    inc %cnter
-  }
+  didtok sbClient_options 31 44 $sbClient.GetAllChannels
   didtok sbClient_options 51 44 %sbClient.channels
   if (%sbClient.nomax == 1) did -c sbClient_options 66
   if (%sbClient.checkver == 1) did -c sbClient_options 71
@@ -251,6 +244,19 @@ alias sbClient.GetNetworkID {
     inc %cnter
   }
 }
+alias sbClient.GetAllNetChannels {
+  var %i = 1, %c = $1
+  while ($chan(%i) != $null) {
+    var %c = $addtok(%c,$+($v1,@,$network),44)
+    inc %i
+  }
+  return %c
+}
+alias sbClient.GetAllChannels {
+  var %c
+  scon -a var % $+ c = $!sbClient.GetAllNetChannels(%c)
+  return %c
+}
 ctcp *:TRIGGER:?: {
   if ($($+(%,sbClient.,$3,@,$2,.requested),2) == 1) {
     set $+(%,sbClient.,$3,@,$2,.trigger) $4
@@ -286,17 +292,7 @@ on *:dialog:sbClient_search:init:0: {
   if (%sbClient.menu.local) did -c sbClient_search 10
   if (%sbClient.menu.channel) did -c sbClient_search 11
   if (%sbClient.find.channel) did -c sbClient_search 25
-  var %cnter = 1, %channels
-  while (%cnter <= $scon(0)) {
-    scon %cnter
-    var %cnter2 = 1
-    while ($chan(%cnter2) != $null) {
-      var %channels = $addtok(%channels,$+($v1,@,$network),44)
-      inc %cnter2
-    }
-    inc %cnter
-  }
-  didtok sbClient_search 21 44 %channels
+  didtok sbClient_search 21 44 $sbClient.GetAllChannels
   did -c sbClient_search 21 %sbClient.last2
 }
 on *:dialog:sbClient_search:close:0: {
