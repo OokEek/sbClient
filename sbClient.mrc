@@ -114,9 +114,14 @@
 ; added advanced options to dialog (atm this only allows setting the regex pattern)
 ; 2.26.1
 ; changes made to WhereIs bot accounted for.
+; 2.26.2
+; added sbClient.GetAllNetChannels & sbClient.GetAllChannels, & replaced existing loops with calls to this.
+; changed some /scon calls to use -t1 to only send the message if connected.
+; reworked the logic when starting a local search when one is already underway.
+; rewrote the update check code to work with github
 ;
 
-alias sbClient.version return 2.26.1
+alias sbClient.version return 2.26.2
 
 ; Ook: added shortcut for dll
 alias sbClientdll return $dll($scriptdirsbClient.dll,$1,$2-)
@@ -143,8 +148,8 @@ dialog sbClient_options {
   button  "Remove",                         56, 183 96 45 45, tab 6
   button  "Request search triggers",        61, 6 146 182 13, tab 6 flat
   check   "No max results limit for local searches (not recommended)", 66, 10 24 200 8, tab 1
-  check   "Check for a new sbClient version on mIRC start", 71, 10 35 200 8, tab 1 disable
-  button  "Check now",                      76, 177 35 54 8, tab 1 flat multi disable
+  check   "Check for a new sbClient version on mIRC start", 71, 10 35 167 8, tab 1
+  button  "Check now",                      76, 177 35 54 10, tab 1 flat multi
 
   check   "Enable Version response",       110, 10 55 100 11, tab 1
 
@@ -155,7 +160,7 @@ dialog sbClient_options {
 
   box     "sbClient",                       81, 8 100 182 40, tab 1
   text    "Here will be some kind of intro text as soon as I figure out what it will be", 86, 15 110 120 40, tab 1 multi
-  link    "www.dukelupus.com",              91, 68 150 80 8, tab 1
+  link    %sbClient.WebSite,                91, 68 150 150 8, tab 1
   check   "Group @find results",            96, 10 46 81 8, tab 1
 
   check   "Enable Advanced Options",       700, 10 24 100 12, tab 7
@@ -168,22 +173,15 @@ on *:dialog:sbClient_options:init:0: {
   sbClient.CheckVars
   if (%sbClient.storetxt == 1) did -c sbClient_options 26
   if (%sbClient.groupfind == 1) did -c sbClient_options 96
-  var %cnter = 1
-  while (%cnter <= $scon(0)) {
-    scon %cnter
-    var %cnter2 = 1
-    while ($chan(%cnter2) != $null) {
-      did -a sbClient_options 31 $+($v1,@,$network)
-      inc %cnter2
-    }
-    inc %cnter
-  }
+  didtok sbClient_options 31 44 $sbClient.GetAllChannels
   didtok sbClient_options 51 44 %sbClient.channels
   if (%sbClient.nomax == 1) did -c sbClient_options 66
   if (%sbClient.checkver == 1) did -c sbClient_options 71
   if (%sbClient.defreqmethod isnum 100-102) did -c sbClient_options $v1
   else did -c sbClient_options 100
   if (%sbClient.versionresponse) did -c $dname 110
+  ; version check only works on v7.56+
+  if ($version < 7.56) did -b $dname 71,76
 }
 on *:dialog:sbClient_options:sclick:700: {
   did $iif($did(700).state,-e,-b) sbClient_options 701-704
@@ -202,7 +200,7 @@ on *:dialog:sbClient_options:sclick:56: {
   did -r sbClient_options 51
   didtok sbClient_options 51 44 %sbClient.channels
 }
-on *:dialog:sbClient_options:sclick:91: url -an http://www.dukelupus.com
+on *:dialog:sbClient_options:sclick:91: url -an %sbClient.WebSite
 on *:dialog:sbClient_options:sclick:76: sbClient.update
 on *:dialog:sbClient_options:sclick:96: set %sbClient.groupfind $did(96).state
 on *:dialog:sbClient_options:sclick:110: set %sbClient.versionresponse $did(110).state
@@ -251,6 +249,19 @@ alias sbClient.GetNetworkID {
     inc %cnter
   }
 }
+alias sbClient.GetAllNetChannels {
+  var %i = 1, %c = $1
+  while ($chan(%i) != $null) {
+    var %c = $addtok(%c,$+($v1,@,$network),44)
+    inc %i
+  }
+  return %c
+}
+alias sbClient.GetAllChannels {
+  var %c
+  scon -a var % $+ c = $!sbClient.GetAllNetChannels(%c)
+  return %c
+}
 ctcp *:TRIGGER:?: {
   if ($($+(%,sbClient.,$3,@,$2,.requested),2) == 1) {
     set $+(%,sbClient.,$3,@,$2,.trigger) $4
@@ -260,7 +271,7 @@ ctcp *:TRIGGER:?: {
 }
 ctcp *:VERSION:?: {
   if (!%sbClient.versionresponse) return
-  if ($network != DejaToons) .ctcpreply $nick VERSION 1,9<<sbClient>> version $sbClient.version by DukeLupus.1,15 Get it from 12,15http://www.dukelupus.com (Modified by Ook)
+  if ($network != DejaToons) .ctcpreply $nick VERSION 1,9<<sbClient>> version $sbClient.version by DukeLupus.1,15 Get it from 12,15 $+ %sbClient.WebSite (Modified by Ook)
 }
 dialog sbClient_search {
   title "sbClient search dialog"
@@ -286,17 +297,7 @@ on *:dialog:sbClient_search:init:0: {
   if (%sbClient.menu.local) did -c sbClient_search 10
   if (%sbClient.menu.channel) did -c sbClient_search 11
   if (%sbClient.find.channel) did -c sbClient_search 25
-  var %cnter = 1, %channels
-  while (%cnter <= $scon(0)) {
-    scon %cnter
-    var %cnter2 = 1
-    while ($chan(%cnter2) != $null) {
-      var %channels = $addtok(%channels,$+($v1,@,$network),44)
-      inc %cnter2
-    }
-    inc %cnter
-  }
-  didtok sbClient_search 21 44 %channels
+  didtok sbClient_search 21 44 $sbClient.GetAllChannels
   did -c sbClient_search 21 %sbClient.last2
 }
 on *:dialog:sbClient_search:close:0: {
@@ -323,11 +324,9 @@ on *:dialog:sbClient_search:sclick:1: {
   if ($did(10).state) {
     ; do local search
     if (%sbClient.searching == 1) {
-      if ($input(Local search seems to be already active. Do you want to stop active local search and start your current search?,yqd,Local search is active) == $true) {
-        sbClientdll Stop 1
-        set %sbClient.searching 0
-      }
-      else return
+      if ($input(Local search seems to be already active. Do you want to stop active local search and start your current search?,yqd,Local search is active) != $true) return
+      sbClientdll Stop 1
+      set %sbClient.searching 0
       if ($did(11).state) goto chansearch
     }
     if (!%sbClient.ListFolder) {
@@ -346,7 +345,7 @@ on *:dialog:sbClient_search:sclick:1: {
   if ($did(25).state) {
     .set -u600 %sbclient.searchactive 1
     .set -u600 %DLF.searchactive 1
-    scon $sbClient.GetNetworkID($did(21).seltext) msg $sbClient.GetChannel($did(21).seltext) @find %sstring
+    scon -t1 $sbClient.GetNetworkID($did(21).seltext) msg $sbClient.GetChannel($did(21).seltext) @find %sstring
   }
   if ($did(11).state) {
     if (!$did(20).seltext) { sbClient.error No channel selected! | return }
@@ -466,9 +465,9 @@ alias -l sbClient.SendToAutoGet {
   if (!%lines) return
 
   var %path = $nofile($script(AutoGet.mrc))
-  .fopen MTlisttowaiting $+(",%path,AGwaiting.ini,")
+  .fopen MTlisttowaiting $+(",%path,AGwaiting.ini")
   if ($fopen(MTlisttowaiting).err) return
-  .fseek -l MTlisttowaiting $lines($+(",%path,AGwaiting.ini,"))
+  .fseek -l MTlisttowaiting $lines($+(",%path,AGwaiting.ini"))
   if ($fopen(MTlisttowaiting).err) return
   var %i = 1, %j = 0
   while (%i <= %lines) {
@@ -713,6 +712,8 @@ alias -l sbClient.CheckVars {
   if (!$var(%sbClient.defreqmethod,0)) set %sbClient.defreqmethod 100
   if (!$var(%sbClient.ResultsFileRegex,0)) set %sbClient.ResultsFileRegex /^Se(?:arch|ek)\w+?[_\s]results[_\s]for[_\s]/i
   if (!$var(%sbClient.ResultsTermsRegex,0)) set %sbClient.ResultsTermsRegex /^(Se(?:arch|ek)\w+?)[_\s]results[_\s]for[_\s](.*)$/i
+  if (!$var(%sbClient.WebSite,0)) set %sbClient.WebSite https://github.com/mIRC-scripts/sbClient
+  if (!$var(%sbClient.CheckWebSite,0)) set %sbClient.CheckWebSite https://raw.githubusercontent.com/mIRC-scripts/sbClient/refs/heads/master/sbClient.ver
 }
 on *:load: {
   if ($script != $script(1)) .load -rs1 $qt($script)
@@ -749,8 +750,7 @@ alias sbClient.Check {
 }
 alias sbClient.DoSearch {
   if (!$($+(%,sbClient.,$1,.trigger),2)) halt
-  scon $sbClient.GetNetworkID($1)
-  msg $sbClient.GetChannel($1) $($+(%,sbClient.,$1,.trigger),2) $2-
+  scon -t1 $sbClient.GetNetworkID($1) msg $sbClient.GetChannel($1) $($+(%,sbClient.,$1,.trigger),2) $2-
 }
 on *:filercvd:*results?for*: {
   var %resultdir = $+($mircdir,SearchBot results), %fn = $nopath($filename)
@@ -784,7 +784,6 @@ on *:filercvd:*results?for*: {
   sbClient.ColorNicks %window
   ; this line sorts window contents by nick
   ;window -bs %window
-  ;titlebar %window -|- SearchBot results for $qt($right($left($gettok(%r,2,1),-4),-1)) -|- Current channel is %sbClient.SearchChannel -|- rclick for options - r = request file - ctrl-r = req & delete - ctrl-z = find -|-
   set %sbClient.string $right($left($gettok(%r,2,1),-4),-1)
   titlebar %window -|- SearchBot results for $qt(%sbClient.string) -|- Current channel is %sbClient.SearchChannel -|- rclick for options - r = request file - ctrl-r = req & delete - ctrl-z = find -|-
   if (%sbClient.storetxt) {
@@ -861,6 +860,8 @@ on *:start: {
   if ($version < 7.46) {
     if (!$isalias(comchar)) .enable #sbclient_nocomchar
   }
+  ; v7.56 required for $urlget()
+  if ($version < 7.56) set %sbClient.checkver 0
   ;
   sbClient.CheckVars
   sbClient.Cleanup
@@ -894,30 +895,22 @@ alias sbClient.Cleanup {
     if (!$sbClient.remove(%f)) sbClient.error Unable to remove %f
   }
 }
-alias sbClient.update {
-  return
-  ; the update code is broken
-  if (!$server) return
-  sockopen sbClient dukelupus.com 80
-}
-on *:sockopen:sbClient: {
-  .sockwrite -n $sockname GET /versions.txt HTTP/1.1
-  .sockwrite -n $sockname Host: dukelupus.com $+ $crlf $+ $crlf
-}
-on *:sockread:sbClient: {
-  if ($sockerr) { .sockclose sbClient | return }
-  else {
-    var %t
-    sockread %t
-    if (($gettok(%t,1,59) == sbClient) && ($gettok(%t,2,59) != $sbClient.version)) {
-      sbClient.Display You should update sbClient. You are using version $sbClient.version $+ , but version $gettok(%t,2,59) is available from sbClient website at 12http://www.dukelupus.com
-      .sockclose sbClient
-    }
-    elseif (($gettok(%t,1,59) == sbClient) && ($gettok(%t,2,59) == $sbClient.version)) {
-      if ($dialog(sbClient_options)) sbClient.Display You have current version of sbClient
-      .sockclose sbClient
-    }
+alias sbClient.update.finished {
+  if ($urlget($1).state != ok) return
+  var %b = $urlget($1).target
+  if (!$bvar(%b,0)) return
+  breplace %b 10 32 13 32
+  var %t = $bvar(%b,1,100).text
+  if (($gettok(%t,1,59) == sbClient) && ($gettok(%t,2,59) != $sbClient.version)) {
+    sbClient.Display You should update sbClient. You are using version $sbClient.version $+ , but version $gettok(%t,2,59) is available from sbClient website at 12 $+ %sbClient.WebSite
   }
+  elseif (($gettok(%t,1,59) == sbClient) && ($gettok(%t,2,59) == $sbClient.version)) {
+    if ($dialog(sbClient_options)) sbClient.Display You have current version of sbClient
+  }
+}
+alias sbClient.update {
+  if (!$server) return
+  noop $urlget(%sbClient.CheckWebSite,bge,&sbClientUpdate,sbClient.update.finished)
 }
 alias F4 { dialog -am sbClient_search sbClient_search }
 on *:input:#: {
